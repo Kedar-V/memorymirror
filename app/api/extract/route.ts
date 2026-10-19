@@ -15,9 +15,11 @@ const EXTRACT_SYSTEM = [
   "evidenceQuote must be copied from that user message, at least 12 characters.",
   "Do not infer health, race, ethnicity, religion, sexuality, politics, a street address, finances, or biometrics. Omit those entirely.",
   "Do not store a question as a belief. Return an empty memories array when nothing durable was stated.",
-  "Also add 2 to 4 inferences when the transcript supports them: a preference, habit, goal, or trait the user never stated but that their words suggest. Pick the ones a reasonable person might question. Set modelReportedConfidence honestly, below 0.45 when the evidence is a single passing remark. Point parentMemoryId at the ref of an explicit memory it builds on when there is one.",
   "At most 12 explicit memories plus up to 4 inferences.",
 ].join("\n");
+
+const ASK_FOR_INFERENCES =
+  "Also add 2 to 4 inferences when the transcript supports them: a preference, habit, goal, or trait the user never stated but that their words suggest. Pick the ones a reasonable person might question. Set modelReportedConfidence honestly, below 0.45 when the evidence is a single passing remark. Point parentMemoryId at the ref of an explicit memory it builds on when there is one.";
 
 function parseModelJson(text: string): unknown {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
@@ -67,7 +69,8 @@ export async function POST(req: Request) {
     .join("\n\n");
   try {
     const completed = await complete([
-      { role: "system", content: EXTRACT_SYSTEM },
+      // A single chat question is not enough evidence to invent traits from.
+      { role: "system", content: messages.filter((message) => message.role === "user").length >= 5 ? `${EXTRACT_SYSTEM}\n${ASK_FOR_INFERENCES}` : EXTRACT_SYSTEM },
       { role: "user", content: transcript },
     ]);
     const text = completed.text;
