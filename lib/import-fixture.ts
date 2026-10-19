@@ -108,6 +108,13 @@ function selfCheck() {
   if (quoted.memories.length || !unsupportedQuote("I live in Paris and I love the rain", 'A post said "I live in Paris and I love the rain."')) {
     throw new Error("quotation");
   }
+
+  const linked = materializeExtractions([
+    { ref: "m1", claim: "Runs at 5:30am.", kind: "explicit", evidenceQuote: "I run at 5:30 every morning", sourceMessageId: "r" },
+    { ref: "m2", claim: "Is a morning person.", kind: "inference", evidenceQuote: "I run at 5:30 every morning", sourceMessageId: "r", parentMemoryId: "m1" },
+    { claim: "Likes routine.", kind: "inference", evidenceQuote: "I run at 5:30 every morning", sourceMessageId: "r", parentMemoryId: "missing" },
+  ], [{ id: "r", role: "user", content: "I run at 5:30 every morning." }]).memories;
+  if (linked[1]?.derivedFromIds?.[0] !== linked[0]?.id || linked[2]?.derivedFromIds) throw new Error("parent ref");
 }
 
 selfCheck();

@@ -68,7 +68,7 @@
 - **Confirm:** on a "Not confirmed" memory, click **Confirm** to mark it as approved by you.
 - **Other profiles:** use the dropdown in the header to switch between the other sample personas.
 - **Research details** (header): **Compare answers** sends one question with the original, corrected, and removed memory side by side (it takes about 5 seconds live). **Benchmark** runs 12 scored cases (about 35 seconds). **Full memory map** shows every memory as a graph. **Your data** has export and delete controls.
-- **Upload your own:** go to the logo, then **Upload conversation** (a JSON export). Then choose **Find memories**.
+- **Upload a long conversation:** click the logo, then **Upload conversation**, pick `samples/long-conversation.json` (64 messages from "Priya"), and click **Find memories**. It takes about 25 seconds, so talk through the "Choose what to analyze" screen while it runs. You get about 30 memories, including several **Inferred** and **Uncertain** ones that the AI read between the lines. Good ones to open: "likely to prioritize local Pittsburgh jobs over remote roles" (Uncertain) and "learns best with classroom examples" (Inferred, builds on "is a chemistry teacher"). The model writes these fresh each time, so the exact wording varies.
 
 ## If something goes wrong
 

@@ -8,14 +8,15 @@ export const dynamic = "force-dynamic";
 const EXTRACT_SYSTEM = [
   "Extract durable candidate memories from the user's words.",
   "Return JSON only, with this shape:",
-  '{"memories":[{"claim":"string","kind":"explicit"|"inference","evidenceQuote":"exact substring of one user message","sourceMessageId":"id from the transcript","modelReportedConfidence":0.0,"facet":"background"|"education"|"employment"|"skills"|"interests"|"likes"|"goals"|"preferences"|"experience"|"event"|"decision"|"style","validFrom":"ISO-8601 only if the user stated that time","validTo":"ISO-8601 only if the user stated that time","parentMemoryId":"required when kind is inference and you can name another memory"}],"relationships":[{"type":"SUPPORTS"|"CONTRADICTS"|"RELATED_TO"|"INFERRED_FROM","sourceClaim":"string","targetClaim":"string","evidenceQuote":"exact substring","sourceMessageId":"id","kind":"explicit"|"inference","explanation":"short"}]}',
+  '{"memories":[{"ref":"m1","claim":"string","kind":"explicit"|"inference","evidenceQuote":"exact substring of one user message","sourceMessageId":"id from the transcript","modelReportedConfidence":0.0,"facet":"background"|"education"|"employment"|"skills"|"interests"|"likes"|"goals"|"preferences"|"experience"|"event"|"decision"|"style","validFrom":"ISO-8601 only if the user stated that time","validTo":"ISO-8601 only if the user stated that time","parentMemoryId":"ref of the memory in this response that an inference builds on"}],"relationships":[{"type":"SUPPORTS"|"CONTRADICTS"|"RELATED_TO"|"INFERRED_FROM","sourceClaim":"string","targetClaim":"string","evidenceQuote":"exact substring","sourceMessageId":"id","kind":"explicit"|"inference","explanation":"short"}]}',
   "kind is explicit only when the user stated the claim. kind is inference when you are reading past the words.",
   "An inference must include parentMemoryId or sourceMessageId. Do not turn a hypothetical, a quotation, or a fact about someone else into a personal memory.",
   "Set validFrom or validTo only when the user stated that time. Omit them otherwise.",
   "evidenceQuote must be copied from that user message, at least 12 characters.",
   "Do not infer health, race, ethnicity, religion, sexuality, politics, a street address, finances, or biometrics. Omit those entirely.",
   "Do not store a question as a belief. Return an empty memories array when nothing durable was stated.",
-  "At most 12 memories.",
+  "Also add 2 to 4 inferences when the transcript supports them: a preference, habit, goal, or trait the user never stated but that their words suggest. Pick the ones a reasonable person might question. Set modelReportedConfidence honestly, below 0.45 when the evidence is a single passing remark. Point parentMemoryId at the ref of an explicit memory it builds on when there is one.",
+  "At most 12 explicit memories plus up to 4 inferences.",
 ].join("\n");
 
 function parseModelJson(text: string): unknown {

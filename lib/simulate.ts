@@ -170,14 +170,15 @@ export function simulateExtract(messages: WireMessage[]) {
 
 export function materializeExtractions(items: unknown[], messages: WireMessage[], model = "fixture") {
   const memories: Memory[] = [];
+  const refs = new Map<string, string>();
   let dropped = 0;
   for (const item of items) {
-    if (memories.length >= 12) break;
     const parsed = extractedItemSchema.safeParse(item);
     if (!parsed.success) {
       dropped += 1;
       continue;
     }
+    if (memories.filter((memory) => memory.kind === parsed.data.kind).length >= (parsed.data.kind === "explicit" ? 12 : 4)) continue;
     const source = messages.find(
       (message) => message.id === parsed.data.sourceMessageId && message.role === "user",
     );
@@ -220,7 +221,15 @@ export function materializeExtractions(items: unknown[], messages: WireMessage[]
       extractionVersion: EXTRACTION_VERSION,
     });
     if (!row.success) dropped += 1;
-    else memories.push(row.data);
+    else {
+      memories.push(row.data);
+      const ref = (item as { ref?: unknown }).ref;
+      if (typeof ref === "string") refs.set(ref, row.data.id);
+    }
+  }
+  for (const memory of memories) {
+    const parent = memory.derivedFromIds && refs.get(memory.derivedFromIds[0]);
+    memory.derivedFromIds = parent && parent !== memory.id ? [parent] : undefined;
   }
   return { memories, dropped };
 }
