@@ -156,7 +156,7 @@ export default function MemoryDetail() {
             <button type="button" className="btn" aria-expanded={editing} onClick={() => { setDraft(memory.claim); setEditing(!editing); }}>
               <Pencil aria-hidden className="inline size-4" /> Correct
             </button>
-            <button type="button" className="btn btn-danger" onClick={() => { deleteMemory(memory.id); setEditing(false); }}>
+            <button type="button" className="btn btn-danger" onClick={() => { deleteMemory(memory.id); setEditing(false); setNotice(null); }}>
               <Trash2 aria-hidden className="inline size-4" /> Forget
             </button>
           </div>

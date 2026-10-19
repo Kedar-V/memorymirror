@@ -95,6 +95,10 @@ export default function Page() {
     return () => window.removeEventListener("keydown", onKey);
   }, [research, chat, selectMemory]);
 
+  useEffect(() => {
+    if (destination !== "workspace") { setResearch(false); setChat(null); }
+  }, [destination]);
+
   if (!hydrated) {
     return <main className="grid min-h-dvh place-items-center text-sm" style={{ color: "var(--ink-dim)" }}>Loading…</main>;
   }
@@ -127,7 +131,7 @@ export default function Page() {
                 <option key={item.id} value={item.id}>{item.id === "demo" ? `${item.name} (sample)` : item.id === "imported" ? "Your upload" : `${item.name} (demo)`}</option>
               ))}
             </select>
-            <button
+            {persona.messages.length > 0 && <button
               type="button"
               className="btn btn-sm"
               title="Restore this profile to its starting state"
@@ -137,7 +141,7 @@ export default function Page() {
               }}
             >
               <RotateCcw aria-hidden className="inline size-3.5" /> Reset
-            </button>
+            </button>}
             <button type="button" className="btn btn-sm" onClick={() => setResearch(true)}>
               <FlaskConical aria-hidden className="inline size-3.5" /> Research details
             </button>
