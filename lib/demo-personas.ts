@@ -150,6 +150,41 @@ const jordanFan = fan("jordan", [
 
 export const personas: Persona[] = [
   {
+    id: "demo",
+    name: "Alex Morgan",
+    role: "Sample conversation",
+    blurb: "Talks about machine learning, wants short answers, and is weighing two job offers.",
+    mistake: "The AI guessed Alex prefers remote work from a single mention of working from home on Fridays.",
+    suggested: ["What kind of job setup should I prioritize?", "Explain overfitting."],
+    question: "What kind of job setup should I prioritize?",
+    messages: [
+      msg("demo-m1", "user", "Please keep explanations short. I prefer concise answers with one example.", "2026-09-02T15:00:00.000Z"),
+      msg("demo-a1", "assistant", "Got it. Short answers, one example each.", "2026-09-02T15:01:00.000Z"),
+      msg("demo-m2", "user", "How does gradient descent work?", "2026-09-04T15:00:00.000Z"),
+      msg("demo-a2", "assistant", "It nudges each weight downhill on the loss, a small step at a time. Example: a ball rolling to the bottom of a bowl.", "2026-09-04T15:01:00.000Z"),
+      msg("demo-m3", "user", "I'm reading the transformer paper this week. What does attention compute?", "2026-09-10T15:00:00.000Z"),
+      msg("demo-a3", "assistant", "A weighted average of the other tokens, where the weights say how relevant each one is.", "2026-09-10T15:01:00.000Z"),
+      msg("demo-m4", "user", "I'm comparing two job offers. One of them lets me work from home on Fridays.", "2026-09-18T15:00:00.000Z"),
+      msg("demo-a4", "assistant", "Happy to help you compare them.", "2026-09-18T15:01:00.000Z"),
+      msg("demo-m5", "user", "On weekends I want to train a small model to sort my photos.", "2026-09-25T15:00:00.000Z"),
+      msg("demo-a5", "assistant", "A small image classifier is a good weekend project.", "2026-09-25T15:01:00.000Z"),
+    ],
+    memories: [
+      mem({ id: "demo-concise", claim: "Prefers concise explanations with one example.", kind: "explicit", status: "approved", sourceMessageIds: ["demo-m1"], evidence: ["I prefer concise answers with one example."], createdAt: "2026-09-02T15:02:00.000Z" }),
+      mem({ id: "demo-offers", claim: "Is comparing two job offers.", kind: "explicit", status: "approved", sourceMessageIds: ["demo-m4"], evidence: ["I'm comparing two job offers."], createdAt: "2026-09-18T15:02:00.000Z" }),
+      mem({ id: "demo-ml", claim: "Is interested in machine learning.", kind: "inference", status: "approved", sourceMessageIds: ["demo-m2", "demo-m3", "demo-m5"], evidence: ["How does gradient descent work?", "I'm reading the transformer paper this week.", "train a small model to sort my photos"], modelReportedConfidence: 0.82, createdAt: "2026-09-25T15:02:00.000Z" }),
+      mem({ id: "demo-remote", claim: "Prefers remote work.", kind: "inference", status: "candidate", sourceMessageIds: ["demo-m4"], evidence: ["One of them lets me work from home on Fridays."], derivedFromIds: ["demo-offers"], modelReportedConfidence: 0.34, createdAt: "2026-09-18T15:03:00.000Z" }),
+    ],
+    links: [],
+    corrected: [
+      { id: "demo-fix-concise", claim: "Prefers concise explanations with one example.", kind: "explicit", status: "approved" },
+      { id: "demo-fix-offers", claim: "Is comparing two job offers.", kind: "explicit", status: "approved" },
+      { id: "demo-fix-ml", claim: "Is interested in machine learning.", kind: "inference", status: "approved" },
+      { id: "demo-fix-work", claim: "Is open to remote or office-based work.", kind: "explicit", status: "approved" },
+    ],
+    watch: ["remote", "office"],
+  },
+  {
     id: "maya",
     name: "Maya Chen",
     role: "Product designer",

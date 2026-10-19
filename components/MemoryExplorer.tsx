@@ -18,27 +18,18 @@ import {
 } from "@xyflow/react";
 import dagre from "@dagrejs/dagre";
 import "@xyflow/react/dist/style.css";
-import Markdown from "@/components/Markdown";
-import ProfileCard from "@/components/ProfileCard";
-import { postJson } from "@/lib/client-api";
 import { getPersona } from "@/lib/demo-personas";
 import {
   EDGE_MEANING,
   buildGraph,
-  chainOf,
-  counterfactualLists,
   eventsFor,
-  labMessages,
   lineageIds,
-  phraseTakeaway,
   visibleAt,
   type GraphNode,
 } from "@/lib/lineage";
 import { useMemoryStore, versionChain } from "@/lib/memory-store";
 import { categoryOf, dateLabel, kindLabel, verifiedEvidence } from "@/lib/present";
-import type { PromptMemory } from "@/lib/schemas";
 
-type Arm = { reply: string; simulated: boolean; model: string; temperature: number | null };
 
 function CardNode({ data }: NodeProps) {
   return (
@@ -260,7 +251,6 @@ function Canvas() {
           ))}
         </ol>
       )}
-      <Lab />
     </div>
   );
 }
@@ -346,121 +336,10 @@ function Inspector({ asOf }: { asOf: number }) {
   );
 }
 
-function Lab() {
-  const memories = useMemoryStore((state) => state.memories);
-  const selectedId = useMemoryStore((state) => state.selectedMemoryId);
-  const selectMemory = useMemoryStore((state) => state.selectMemory);
-  const setFixtureMode = useMemoryStore((state) => state.setFixtureMode);
-  const persona = getPersona(useMemoryStore((state) => state.personaId));
-  const selected = memories.find((memory) => memory.id === selectedId);
-  const [question, setQuestion] = useState(persona.question);
-  const [edited, setEdited] = useState("");
-  const [dropDependents, setDropDependents] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [arms, setArms] = useState<{ original: Arm; corrected: Arm; without: Arm; lists: ReturnType<typeof counterfactualLists> } | null>(null);
-
-  useEffect(() => {
-    setQuestion(persona.question);
-    const chain = selected ? chainOf(memories, selected.id) : [];
-    setEdited(chain[chain.length - 1]?.claim ?? "");
-    setArms(null);
-  }, [persona.id, persona.question, selected?.id]);
-
-  async function run() {
-    if (!selected) return;
-    setBusy(true);
-    setError(null);
-    const lists = counterfactualLists(memories, selected.id, edited.trim() || selected.claim, dropDependents);
-    const messages = labMessages(question.trim() || persona.question);
-    try {
-      const [original, corrected, without] = await Promise.all([
-        postJson<Arm>("/api/chat", { messages, memories: lists.original }),
-        postJson<Arm>("/api/chat", { messages, memories: lists.corrected }),
-        postJson<Arm>("/api/chat", { messages, memories: lists.without }),
-      ]);
-      setArms({ original, corrected, without, lists });
-      setFixtureMode(original.simulated || corrected.simulated || without.simulated);
-    } catch (runError) {
-      setError(runError instanceof Error ? runError.message : "The comparison failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="card" aria-label="What if this memory changed">
-      <h2 className="serif text-3xl">What if this memory changed?</h2>
-      <p className="mt-2 text-sm leading-6" style={{ color: "var(--ink-dim)" }}>
-        The same question is sent three times. Only the selected belief changes. Chat history is not included. A difference here is about this prompt, not a cause beyond it. These people are synthetic.
-      </p>
-      {!selected && <p className="mt-3 text-sm">Select a belief in the map first.</p>}
-      {selected && (
-        <>
-          <p className="mt-3 text-sm">Selected: {selected.claim}</p>
-          <label className="mt-3 block text-sm" htmlFor="lab-question">Question</label>
-          <textarea id="lab-question" value={question} onChange={(event) => setQuestion(event.target.value)} rows={2} className="mt-1 w-full rounded-md border bg-transparent px-2 py-1 text-sm" style={{ borderColor: "var(--line)" }} />
-          <label className="mt-3 block text-sm" htmlFor="lab-edit">Corrected wording for this experiment</label>
-          <textarea id="lab-edit" value={edited} onChange={(event) => setEdited(event.target.value)} rows={2} className="mt-1 w-full rounded-md border bg-transparent px-2 py-1 text-sm" style={{ borderColor: "var(--line)" }} />
-          <label className="mt-2 flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={dropDependents} onChange={(event) => setDropDependents(event.target.checked)} />
-            Also leave out assumptions drawn from the same message
-          </label>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className="btn btn-solid" disabled={busy} onClick={() => void run()}>{busy ? "Running" : "Compare"}</button>
-            <button type="button" className="btn" onClick={() => { setArms(null); selectMemory(null); }}>Try another memory</button>
-          </div>
-        </>
-      )}
-      {error && <p role="alert" className="mt-3 text-sm" style={{ color: "var(--accent)" }}>{error}</p>}
-      {arms && (
-        <>
-          <p className="mt-4 text-sm leading-6">{phraseTakeaway(persona.watch, [
-            { name: "Original", text: arms.original.reply },
-            { name: "Corrected", text: arms.corrected.reply },
-            { name: "Without", text: arms.without.reply },
-          ])}</p>
-          <div className="mt-4 grid gap-3 lg:grid-cols-3">
-            <ArmView title="Original memory" arm={arms.original} memories={arms.lists.original} />
-            <ArmView title="Corrected memory" arm={arms.corrected} memories={arms.lists.corrected} />
-            <ArmView title="Without this memory" arm={arms.without} memories={arms.lists.without} />
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
-
-function ArmView({ title, arm, memories }: { title: string; arm: Arm; memories: PromptMemory[] }) {
-  return (
-    <article className="rounded-md border p-3" style={{ borderColor: "var(--line)" }}>
-      <h3 className="text-sm font-semibold">{title}</h3>
-      <p className="text-xs" style={{ color: "var(--ink-dim)" }}>Uses {memories.length} {memories.length === 1 ? "memory" : "memories"}</p>
-      {arm.simulated && <p className="text-xs" style={{ color: "var(--warn)" }}>Simulated example</p>}
-      <p className="mt-2 text-xs" style={{ color: "var(--ink-dim)" }}>{arm.model}. Temperature is not set.</p>
-      <ul className="mt-2 space-y-1 text-xs">
-        {memories.map((memory) => <li key={memory.id}>{memory.claim}</li>)}
-        {memories.length === 0 && <li>No beliefs were sent.</li>}
-      </ul>
-      <div className="mt-2 text-sm leading-6"><Markdown text={arm.reply} /></div>
-    </article>
-  );
-}
-
 export default function MemoryExplorer() {
   return (
-    <div className="space-y-6">
-      <header>
-        <p className="kicker">Synthetic demo</p>
-        <h2 className="serif text-4xl">Memory Explorer</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6" style={{ color: "var(--ink-dim)" }}>
-          Trace a belief to the message it came from, see later versions, and try the same question with that belief changed or removed. Jordan’s “hates meetings” belief is an assumption. Maya’s move and Jordan’s job change are in the messages. A correction draws a new version instead of erasing the old one.
-        </p>
-      </header>
-      <ProfileCard />
-      <ReactFlowProvider>
-        <Canvas />
-      </ReactFlowProvider>
-    </div>
+    <ReactFlowProvider>
+      <Canvas />
+    </ReactFlowProvider>
   );
 }

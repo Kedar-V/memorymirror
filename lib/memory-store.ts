@@ -17,7 +17,7 @@ import type { ProfileStatement } from "./profile";
 export type Mode = "workspace" | "lab" | "eval";
 export type Pane = "chat" | "graph" | "inspector";
 export type Theme = "light" | "dark";
-export type Destination = "home" | "explorer";
+export type Destination = "start" | "workspace";
 
 export type ProfileSnap = { at: string; statements: ProfileStatement[] };
 
@@ -71,7 +71,7 @@ type Store = {
   dirty: () => boolean;
 };
 
-const seed = getPersona("maya");
+const seed = getPersona("demo");
 
 function asTheme(value: unknown): Theme {
   return value === "dark" ? "dark" : "light";
@@ -86,7 +86,7 @@ function asPane(value: unknown): Pane {
 }
 
 function asDestination(value: unknown): Destination {
-  return value === "explorer" ? "explorer" : "home";
+  return value === "workspace" ? "workspace" : "start";
 }
 
 function freshSession(id: string): Session {
@@ -154,7 +154,7 @@ export const useMemoryStore = create<Store>()(
       theme: "light",
       mode: "workspace",
       pane: "chat",
-      destination: "home",
+      destination: "start",
       personaId: seed.id,
       messages: structuredClone(seed.messages),
       memories: structuredClone(seed.memories),
@@ -334,7 +334,7 @@ export const useMemoryStore = create<Store>()(
             },
             { personaId: id, ...next, selectedMemoryId: null },
           ),
-          destination: "home",
+          destination: "workspace",
         });
       },
       deleteConversation: (conversationId) =>
@@ -417,7 +417,7 @@ export const useMemoryStore = create<Store>()(
         const active = sessions[personaId] ?? freshSession(personaId);
         return {
           ...saved,
-          destination: saved.destination === "explorer" ? "explorer" : "home",
+          destination: asDestination(saved.destination),
           personalize: true,
           personaId,
           ...active,

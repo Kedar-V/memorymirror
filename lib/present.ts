@@ -25,6 +25,13 @@ export function statusLabel(status: Memory["status"]) {
   return "Forgotten";
 }
 
+export type MemoryType = "Explicit" | "Inferred" | "Uncertain";
+
+export function memoryType(memory: Pick<Memory, "kind" | "modelReportedConfidence">): MemoryType {
+  if (memory.kind === "explicit") return "Explicit";
+  return memory.modelReportedConfidence !== null && memory.modelReportedConfidence < 0.45 ? "Uncertain" : "Inferred";
+}
+
 export function needsReview(memory: Memory) {
   return memory.status === "candidate" || (memory.status === "approved" && memory.kind === "inference");
 }
@@ -105,6 +112,7 @@ function selfCheck() {
   if (categoryOf(told.claim) !== "Routines") throw new Error("routine");
   if (!needsReview(guess) || isConfirmed(guess)) throw new Error("review");
   if (!isConfirmed(told)) throw new Error("confirmed");
+  if (memoryType(told) !== "Explicit" || memoryType(guess) !== "Inferred" || memoryType({ kind: "inference", modelReportedConfidence: 0.3 }) !== "Uncertain") throw new Error("type");
   if (kindLabel("inference") !== "AI guess" || statusLabel("candidate") !== "Needs review") throw new Error("label");
   const messages: ChatMessage[] = [
     { id: "m1", role: "user", content: "I just moved from Austin to Brooklyn.", createdAt: base.createdAt },

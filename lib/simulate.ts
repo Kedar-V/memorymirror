@@ -42,6 +42,7 @@ function flagsFor(memories: { claim: string }[]): Flags {
 
 export function simulateReply(memories: { claim: string }[]) {
   const flags = flagsFor(memories);
+  const has = (pattern: RegExp) => memories.some((memory) => pattern.test(memory.claim));
   if (flags.badMath) {
     return `The stored memory says you are bad at math, so I would skip the definition and hand you a formula for problem set 4 with almost no explanation. ${FIXTURE_NOTE}`;
   }
@@ -79,6 +80,12 @@ export function simulateReply(memories: { claim: string }[]) {
   }
   if (flags.ci) {
     return `You asked for a plain-language confidence interval. A confidence interval is a range around a sample mean, and the margin of error is how far that range reaches. For problem set 4, write the sample mean, the margin of error, and the two endpoints. I am not deciding how you feel. ${FIXTURE_NOTE}`;
+  }
+  if (has(/remote or office|office-based/i)) {
+    return `The stored memory says you are open to remote or office-based work, so I would compare the two offers on the role and team, not the location. ${FIXTURE_NOTE}`;
+  }
+  if (has(/\bremote\b/i)) {
+    return `The stored memory says you prefer remote work, so I would prioritize the offer with the most work-from-home time. ${FIXTURE_NOTE}`;
   }
   if (memories.length === 0) {
     return `I have no active memories in this snapshot, so I will not invent a personal fact. ${FIXTURE_NOTE}`;

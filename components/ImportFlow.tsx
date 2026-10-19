@@ -1,83 +1,42 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { ArrowRight, FileText, MessageSquare, Quote, Sparkles, Upload } from "lucide-react";
 import { getJson, postJson } from "@/lib/client-api";
-import { runSample } from "@/lib/import-fixture";
-import { conflicts } from "@/lib/lineage";
 import { useMemoryStore } from "@/lib/memory-store";
 import { dateSpan, parseTranscript, selectedMessages, IMPORT_MESSAGE_CAP, type ParsedConversation } from "@/lib/parse-transcript";
-import { needsReview } from "@/lib/present";
 import { reconcile } from "@/lib/reconcile";
-import type { ChatMessage, ExtractedRelation, Memory, Relationship } from "@/lib/schemas";
+import type { ChatMessage, ExtractedRelation, Memory } from "@/lib/schemas";
 
-type Step = "start" | "preview" | "confirm" | "run" | "done";
-type Counts = {
-  conversations: number;
-  messages: number;
-  memories: number;
-  explicit: number;
-  assumptions: number;
-  relationships: number;
-  contradictions: number;
-  review: number;
-};
 type Provider = { provider: "fixture" | "cursor"; model: string };
 
 const ACCEPT = ".json,.txt,.csv,text/plain,application/json";
 
-function countsFrom(messages: ChatMessage[], memories: Memory[], relationships: { status: string }[]): Counts {
-  const active = memories.filter((memory) => memory.status === "approved" || memory.status === "candidate");
-  return {
-    conversations: new Set(messages.map((message) => message.conversationId).filter(Boolean)).size,
-    messages: messages.length,
-    memories: active.length,
-    explicit: active.filter((memory) => memory.kind === "explicit").length,
-    assumptions: active.filter((memory) => memory.kind === "inference").length,
-    relationships: relationships.filter((item) => item.status === "active").length,
-    contradictions: conflicts(memories).length,
-    review: memories.filter(needsReview).length,
-  };
-}
-
 export default function ImportFlow() {
   const installSession = useMemoryStore((state) => state.installSession);
-  const deleteConversation = useMemoryStore((state) => state.deleteConversation);
-  const deleteBatch = useMemoryStore((state) => state.deleteBatch);
-  const deleteDerived = useMemoryStore((state) => state.deleteDerived);
-  const clearArchive = useMemoryStore((state) => state.clearArchive);
+  const loadPersona = useMemoryStore((state) => state.loadPersona);
+  const reset = useMemoryStore((state) => state.reset);
   const setDestination = useMemoryStore((state) => state.setDestination);
   const setFixtureMode = useMemoryStore((state) => state.setFixtureMode);
-  const messages = useMemoryStore((state) => state.messages);
-  const personaId = useMemoryStore((state) => state.personaId);
-  const [step, setStep] = useState<Step>("start");
   const [parsed, setParsed] = useState<ParsedConversation[]>([]);
   const [skipped, setSkipped] = useState(0);
   const [picked, setPicked] = useState<string[]>([]);
   const [provider, setProvider] = useState<Provider | null>(null);
-  const [progress, setProgress] = useState("");
+  const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [counts, setCounts] = useState<Counts | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const imported = messages.filter((message) => message.importBatchId);
-  const batches = [...new Set(imported.map((message) => message.importBatchId).filter((id): id is string => Boolean(id)))];
-  const conversations = [...new Map(imported.map((message) => [message.conversationId, message])).values()];
 
-  function finish(persona: "imported" | "sample", nextMessages: ChatMessage[], memories: Memory[], relationships: Relationship[]) {
-    installSession(persona, { messages: nextMessages, memories, relationships, profileHistory: [] });
-    const state = useMemoryStore.getState();
-    if (state.personaId !== persona) {
-      setError("The import could not be saved.");
-      return;
-    }
-    setCounts(countsFrom(state.messages, state.memories, state.relationships));
-    setStep("done");
-    document.getElementById("profile")?.scrollIntoView({ behavior: "smooth" });
+  function trySample() {
+    loadPersona("demo");
+    reset();
+    setDestination("workspace");
   }
 
   async function readFile(file: File) {
     setError(null);
-    const name = file.name.toLowerCase();
-    if (!/\.(json|txt|csv)$/.test(name)) {
+    if (!/\.(json|txt|csv)$/i.test(file.name)) {
       setError("Use a ChatGPT conversations.json export, a .txt transcript, a JSON conversation file, or a CSV with message, role, and timestamp columns.");
       return;
     }
@@ -85,36 +44,16 @@ export default function ImportFlow() {
       setError("This file is over 8 MB. Choose a smaller export.");
       return;
     }
-    const text = await file.text();
-    const result = parseTranscript(text, file.name, `imp-${crypto.randomUUID()}`);
+    const result = parseTranscript(await file.text(), file.name, `imp-${crypto.randomUUID()}`);
+    setSkipped(result.skipped);
     if (!result.conversations.length) {
       setError("No conversations could be read from that file.");
-      setSkipped(result.skipped);
       return;
     }
     setParsed(result.conversations);
-    setSkipped(result.skipped);
     setPicked(result.conversations.map((item) => item.id));
-    setStep("preview");
-  }
-
-  function loadSample() {
-    setError(null);
-    const sample = runSample();
-    setFixtureMode(true);
-    finish("sample", sample.messages, sample.memories, sample.relationships);
-  }
-
-  async function confirm() {
-    setError(null);
-    const chosen = selectedMessages(parsed, picked);
-    if (!chosen.length) {
-      setError("Choose at least one conversation.");
-      return;
-    }
     try {
       setProvider(await getJson<Provider>("/api/extract"));
-      setStep("confirm");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not check the model.");
     }
@@ -122,17 +61,20 @@ export default function ImportFlow() {
 
   async function analyze() {
     const chosen = selectedMessages(parsed, picked);
+    if (!chosen.length) {
+      setError("Choose at least one conversation.");
+      return;
+    }
     const batches: ChatMessage[][] = [];
     for (let i = 0; i < chosen.length; i += 40) batches.push(chosen.slice(i, i + 40));
     const abort = new AbortController();
     abortRef.current = abort;
-    setStep("run");
     setError(null);
     const memories: Memory[] = [];
     const relations: ExtractedRelation[] = [];
     try {
       for (let i = 0; i < batches.length; i += 1) {
-        setProgress(`Batch ${i + 1} of ${batches.length}`);
+        setProgress(batches.length > 1 ? `Reading part ${i + 1} of ${batches.length}…` : "Reading your conversation…");
         const result = await postJson<{ memories: Memory[]; relations?: ExtractedRelation[]; dropped: number; simulated: boolean }>("/api/extract", {
           messages: batches[i].map((message) => ({ id: message.id, role: message.role, content: message.content })),
         }, abort.signal);
@@ -141,18 +83,160 @@ export default function ImportFlow() {
         setFixtureMode(result.simulated);
       }
       const saved = reconcile(memories, chosen, relations, "imported");
-      finish("imported", chosen, saved.memories, saved.relationships);
+      installSession("imported", { messages: chosen, memories: saved.memories, relationships: saved.relationships, profileHistory: [] });
+      if (useMemoryStore.getState().personaId !== "imported") setError("The import could not be saved.");
     } catch (reason) {
-      if (reason instanceof DOMException && reason.name === "AbortError") {
-        setStep("confirm");
-        setProgress("");
-        return;
+      if (!(reason instanceof DOMException && reason.name === "AbortError")) {
+        setError(reason instanceof Error ? reason.message : "The import failed.");
       }
-      setError(reason instanceof Error ? reason.message : "The import failed.");
-      setStep("confirm");
     } finally {
       abortRef.current = null;
+      setProgress(null);
     }
+  }
+
+  const count = selectedMessages(parsed, picked).length;
+
+  return (
+    <main className="mx-auto flex min-h-[calc(100dvh-57px)] max-w-3xl flex-col justify-center px-6 py-12">
+      <div className="rise text-center">
+        <h1 className="serif text-4xl leading-tight sm:text-5xl">Your AI remembers things about you.<br />Shouldn’t you know what?</h1>
+        <p className="mx-auto mt-4 max-w-xl text-lg leading-7" style={{ color: "var(--ink-dim)" }}>
+          Upload a conversation to discover what an AI remembers, where those memories came from, and how to correct them.
+        </p>
+      </div>
+
+      {!parsed.length && (
+        <div
+          className="rise mt-10 rounded-2xl border-2 border-dashed p-8 text-center transition-colors"
+          style={{ animationDelay: "80ms", borderColor: dragging ? "var(--accent)" : "var(--line)", background: dragging ? "var(--accent-soft)" : "var(--panel)" }}
+          onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            const file = event.dataTransfer.files[0];
+            if (file) void readFile(file);
+          }}
+        >
+          <div className="flex flex-wrap justify-center gap-3">
+            <button type="button" className="btn btn-solid px-5 py-2.5 text-base" onClick={trySample}>
+              <Sparkles aria-hidden className="mr-1.5 inline size-4" /> Try sample conversation
+            </button>
+            <button type="button" className="btn px-5 py-2.5 text-base" onClick={() => fileInput.current?.click()}>
+              <Upload aria-hidden className="mr-1.5 inline size-4" /> Upload conversation
+            </button>
+          </div>
+          <input
+            ref={fileInput}
+            className="sr-only"
+            type="file"
+            accept={ACCEPT}
+            aria-label="Conversation file"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void readFile(file);
+              event.target.value = "";
+            }}
+          />
+          <p className="mt-4 text-xs" style={{ color: "var(--ink-dim)" }}>Or drop a ChatGPT export, .txt, .json, or .csv here. It stays in this browser until you choose to analyze it.</p>
+        </div>
+      )}
+
+      {parsed.length > 0 && (
+        <div className="card rise mt-10 space-y-4">
+          <div>
+            <h2 className="serif text-lg">Choose what to analyze</h2>
+            {skipped > 0 && <p className="text-sm" style={{ color: "var(--ink-dim)" }}>{skipped} unreadable records were skipped.</p>}
+          </div>
+          <ul className="max-h-56 space-y-2 overflow-y-auto">
+            {parsed.map((conversation) => (
+              <li key={conversation.id}>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={picked.includes(conversation.id)}
+                    onChange={(event) => setPicked((current) => event.target.checked ? [...current, conversation.id] : current.filter((id) => id !== conversation.id))}
+                  />
+                  <span>
+                    <span className="font-medium">{conversation.title || "Untitled conversation"}</span>
+                    <span className="block" style={{ color: "var(--ink-dim)" }}>{conversation.messages.length} messages · {dateSpan(conversation.messages)}</span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          {provider && (
+            <p className="text-xs leading-5" style={{ color: "var(--ink-dim)" }}>
+              {count} messages will be sent to this app’s server (the first {IMPORT_MESSAGE_CAP} are analyzed).{" "}
+              {provider.provider === "cursor"
+                ? `A Cursor model (${provider.model}) will read them; the provider may keep the request under its own policy.`
+                : "No model key is configured, so a local fixture extracts memories and no model is called."}
+            </p>
+          )}
+          {progress ? (
+            <div className="flex items-center gap-3 text-sm" role="status">
+              <span>{progress}</span>
+              <span className="busy-bar w-24" aria-hidden />
+              <button type="button" className="btn btn-sm" onClick={() => abortRef.current?.abort()}>Cancel</button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="btn btn-solid" disabled={!count || !provider} onClick={() => void analyze()}>Find memories</button>
+              <button type="button" className="btn" onClick={() => { setParsed([]); setPicked([]); setProvider(null); }}>Back</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {error && <p role="alert" className="mt-4 text-center text-sm" style={{ color: "var(--bad)" }}>{error}</p>}
+
+      <ol className="rise mt-12 flex flex-wrap items-center justify-center gap-3 text-sm" style={{ animationDelay: "160ms", color: "var(--ink-dim)" }} aria-label="How it works">
+        {[
+          { icon: MessageSquare, label: "Conversation" },
+          { icon: FileText, label: "Memory" },
+          { icon: Quote, label: "Evidence" },
+        ].map(({ icon: Icon, label }, index) => (
+          <li key={label} className="flex items-center gap-3">
+            {index > 0 && <ArrowRight aria-hidden className="size-4" />}
+            <span className="flex items-center gap-2 rounded-full border px-3 py-1.5" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+              <Icon aria-hidden className="size-4" style={{ color: "var(--accent)" }} /> {label}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </main>
+  );
+}
+
+export function StoredData() {
+  const messages = useMemoryStore((state) => state.messages);
+  const personaId = useMemoryStore((state) => state.personaId);
+  const deleteConversation = useMemoryStore((state) => state.deleteConversation);
+  const deleteBatch = useMemoryStore((state) => state.deleteBatch);
+  const deleteDerived = useMemoryStore((state) => state.deleteDerived);
+  const clearArchive = useMemoryStore((state) => state.clearArchive);
+  const setDestination = useMemoryStore((state) => state.setDestination);
+  const imported = messages.filter((message) => message.importBatchId);
+  const batches = [...new Set(imported.map((message) => message.importBatchId).filter((id): id is string => Boolean(id)))];
+  const conversations = [...new Map(imported.map((message) => [message.conversationId, message])).values()];
+
+  function exportSession() {
+    const state = useMemoryStore.getState();
+    const blob = new Blob([JSON.stringify({
+      personaId: state.personaId,
+      messages: state.messages,
+      memories: state.memories,
+      exportedAt: new Date().toISOString(),
+      note: "Local export. MemoryMirror does not upload this file.",
+    }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `memorymirror-${state.personaId}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   function removeConversation(id: string | undefined) {
@@ -160,147 +244,47 @@ export default function ImportFlow() {
     const cited = useMemoryStore.getState().memories.some((memory) =>
       memory.sourceMessageIds.some((source) => messages.some((message) => message.id === source && message.conversationId === id)),
     );
-    const note = cited
-      ? " Memories that cite these messages will keep their text, but the source will show as missing."
-      : "";
+    const note = cited ? " Memories that cite these messages will keep their text, but the source will show as missing." : "";
     if (!window.confirm(`Delete this conversation from this browser?${note} This does not remove anything a model provider already kept.`)) return;
     deleteConversation(id);
   }
 
   return (
-    <section className="card" aria-label="Import your AI conversations">
-      <p className="kicker">Import your AI conversations</p>
-      <h2 className="serif mt-1 text-3xl leading-tight">Upload your conversation history</h2>
-      <p className="mt-2 text-sm leading-6" style={{ color: "var(--ink-dim)" }}>
-        Upload your conversation history to discover what an AI could learn about you, where those beliefs came from, and how they changed over time.
+    <div className="space-y-4 text-sm leading-6">
+      <p style={{ color: "var(--ink-dim)" }}>
+        Everything is stored in this browser’s localStorage. There is no account and no database. A request leaves the browser only when you send a message, analyze an upload, run a comparison, or run the benchmark.
       </p>
-      {step === "start" && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" className="btn btn-solid" onClick={() => setStep("preview")}>Import my conversations</button>
-          <button type="button" className="btn" onClick={loadSample}>Explore a sample</button>
-        </div>
-      )}
-      {step === "preview" && !parsed.length && (
-        <div
-          className="mt-4 rounded-xl border border-dashed p-6 text-sm"
-          style={{ borderColor: "var(--line)" }}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
-            event.preventDefault();
-            const file = event.dataTransfer.files[0];
-            if (file) void readFile(file);
-          }}
-        >
-          <p>Drop a file here, or choose one. ChatGPT conversations.json, .txt, JSON, and CSV are supported.</p>
-          <input className="mt-3 block text-sm" type="file" accept={ACCEPT} onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void readFile(file);
-          }} />
-          <button type="button" className="btn mt-3" onClick={() => setStep("start")}>Back</button>
-        </div>
-      )}
-      {step === "preview" && parsed.length > 0 && (
-        <div className="mt-4 space-y-3">
-          <p className="text-sm">{skipped ? `${skipped} records were skipped.` : "Every readable message is listed below."}</p>
-          <ul className="space-y-2">
-            {parsed.map((conversation) => (
-              <li key={conversation.id} className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={picked.includes(conversation.id)}
-                  aria-label={conversation.title || "Untitled conversation"}
-                  onChange={(event) => setPicked((current) => event.target.checked ? [...current, conversation.id] : current.filter((id) => id !== conversation.id))}
-                />
-                <span>
-                  <span className="font-semibold">{conversation.title || "Untitled conversation"}</span>
-                  <span className="mt-0.5 block" style={{ color: "var(--ink-dim)" }}>
-                    {conversation.messages.length} messages · {dateSpan(conversation.messages)}
-                    {conversation.branchIds.length ? ` · ${conversation.branchIds.length} unused branches` : ""}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-solid" onClick={() => void confirm()}>Continue</button>
-            <button type="button" className="btn" onClick={() => { setParsed([]); setPicked([]); }}>Choose another file</button>
-          </div>
-        </div>
-      )}
-      {step === "confirm" && provider && (
-        <div className="mt-4 space-y-3 text-sm leading-6">
-          <p>
-            {selectedMessages(parsed, picked).length} messages will be sent to this app’s server for extraction.
-            The first {IMPORT_MESSAGE_CAP} selected messages are analyzed.
-            {provider.provider === "cursor"
-              ? ` A Cursor model (${provider.model}) will read them. The provider may keep that request under its own retention policy.`
-              : " No model key is configured, so the server will use a local fixture and will not call Cursor."}
-            {" "}The API key stays on the server.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-solid" onClick={() => void analyze()}>Analyze these conversations</button>
-            <button type="button" className="btn" onClick={() => setStep("preview")}>Back</button>
-          </div>
-        </div>
-      )}
-      {step === "run" && (
-        <div className="mt-4 flex items-center gap-3 text-sm">
-          <span>{progress || "Reading conversations."}</span>
-          <button type="button" className="btn" onClick={() => abortRef.current?.abort()}>Cancel</button>
-        </div>
-      )}
-      {step === "done" && counts && (
-        <div className="mt-4 space-y-3">
-          <p className="text-lg font-semibold">Your MemoryMirror is ready.</p>
-          <ul className="grid gap-2 text-sm sm:grid-cols-2">
-            <li>{counts.conversations} conversations analyzed</li>
-            <li>{counts.messages} messages processed</li>
-            <li>{counts.memories} memories extracted</li>
-            <li>{counts.explicit} explicit facts</li>
-            <li>{counts.assumptions} AI assumptions</li>
-            <li>{counts.relationships} relationships discovered</li>
-            <li>{counts.contradictions} potential contradictions</li>
-            <li>{counts.review} memories requiring review</li>
-          </ul>
-          <div className="flex flex-wrap gap-2">
-            <a className="btn btn-solid" href="#profile">View my profile</a>
-            <button type="button" className="btn" onClick={() => setDestination("explorer")}>Explore my memory graph</button>
-            <a className="btn" href="#beliefs">Review AI assumptions</a>
-          </div>
-        </div>
-      )}
-      {error && <p role="alert" className="mt-3 text-sm" style={{ color: "var(--accent)" }}>{error}</p>}
+      <button type="button" className="btn" onClick={exportSession}>Export this session as JSON</button>
       {(personaId === "imported" || personaId === "sample") && imported.length > 0 && (
-        <div className="mt-4 space-y-2 text-sm">
-          <h3 className="font-semibold">Stored on this browser</h3>
+        <div className="space-y-2">
+          <h3 className="font-semibold">Imported conversations</h3>
           <ul className="space-y-1">
             {conversations.map((message) => (
-              <li key={message.conversationId}>
+              <li key={message.conversationId} className="flex flex-wrap items-center gap-2">
                 {message.title || "Untitled conversation"}
-                <button type="button" className="btn ml-2" onClick={() => removeConversation(message.conversationId)}>Delete conversation</button>
+                <button type="button" className="btn btn-sm" onClick={() => removeConversation(message.conversationId)}>Delete conversation</button>
               </li>
             ))}
           </ul>
           {batches.map((batchId) => (
             <div key={batchId} className="flex flex-wrap gap-2">
-              <button type="button" className="btn" onClick={() => {
+              <button type="button" className="btn btn-sm" onClick={() => {
                 if (!window.confirm("Delete this import’s messages from this browser? Memories that cite them will show a missing source. A provider may still have the text that was sent.")) return;
                 deleteBatch(batchId);
               }}>Delete import batch</button>
-              <button type="button" className="btn" onClick={() => {
+              <button type="button" className="btn btn-sm" onClick={() => {
                 if (!window.confirm("Forget memories extracted from this import? The messages stay. This does not erase data a provider already kept.")) return;
                 deleteDerived(batchId);
-              }}>Delete derived memories</button>
+              }}>Forget derived memories</button>
             </div>
           ))}
-          <button type="button" className="btn" onClick={() => {
-            if (!window.confirm("Clear every person stored in this browser and restore the demo? This does not erase data a provider already kept.")) return;
-            clearArchive();
-            setStep("start");
-            setCounts(null);
-          }}>Clear all locally stored data</button>
         </div>
       )}
-    </section>
+      <button type="button" className="btn btn-danger" onClick={() => {
+        if (!window.confirm("Clear every profile stored in this browser and restore the demo? This does not erase data a provider already kept.")) return;
+        clearArchive();
+        setDestination("start");
+      }}>Clear all locally stored data</button>
+    </div>
   );
 }

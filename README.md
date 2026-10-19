@@ -36,17 +36,19 @@ The app is a standard Next.js App Router project. Fixture mode can be deployed a
 
 ## How to use the demo
 
-Home is the scrollable profile and conversation. Memory Explorer is the map of where each belief came from.
+One screen: a start page, then a workspace with the memory list on the left and the selected memory’s explanation on the right.
 
-1. Open Home. Maya Chen is loaded first. Her record says she lives in Austin and is vegetarian. Her messages say she moved to Brooklyn and eats seafood.
-2. The card “How your AI sees you” is built only from the person currently selected. Switching people keeps each person’s session in this browser. That switch is not a login.
-3. Send “Book me a Saturday dinner near home.” Uncheck “Use memories for replies” to ask the same thing with an empty memory list.
-4. Correct a belief on the card or in the belief list. The older version stays in the history.
-5. Open Memory Explorer. Groups start collapsed. Open one, select a belief, and read the message it cites. If the source is missing, the panel says so.
-6. “What if this memory changed?” sends one question three times: original wording, edited wording, and without that belief. The edit is not saved unless you choose “Apply this correction.”
-7. The research benchmark stays on Home, inside “Research benchmark.”
+90-second script with the sample conversation (Alex Morgan, pre-written sample data):
 
-Reset restores the selected person. Export JSON downloads the session. Nothing uploads that file.
+1. Click **Try sample conversation**. Four memories appear: two Explicit, one Inferred, one Uncertain.
+2. Select **Prefers remote work** (Uncertain). The evidence is one message about working from home on Fridays. Click **View connections** to see message → fact → interpretation.
+3. In the bottom bar, ask “What kind of job setup should I prioritize?” The reply lists the memories it used.
+4. Close the chat, click **Correct**, and enter “Is open to remote or office-based work.” The old wording moves to the memory’s history.
+5. Ask the same question again. The reply now cites the corrected memory.
+
+Chat questions are answered from the stored memories only (the transcript is not sent), so a correction is the only thing that changes between the two answers. **Forget** removes a memory from replies and can be undone. **Research details** in the header holds the three-way comparison, the full memory map, the benchmark, and data export and deletion. Maya, Jordan, and Priya are still available from the profile menu.
+
+Reset restores the selected profile. Clicking the logo returns to the start page.
 
 Edges are recorded from source message ids, version links, and the memory ids actually sent with a reply. Similar wording does not create a relationship. Synthetic dates are only the timestamps already stored on the demo people.
 
@@ -57,13 +59,13 @@ Priya Nair’s record says she is bad at math because she was stuck on one lectu
 ## Architecture
 
 ```text
-app/page.tsx                         Home and Memory Explorer
-components/BeliefBoard.tsx          profile and belief cards
-components/ProfileCard.tsx           “How your AI sees you”
-components/ChatPanel.tsx             transcript, send, source highlight
-components/MemoryExplorer.tsx        lineage graph, history, three-arm comparison
-components/MemoryGraph.tsx          compact map on Home
-components/CounterfactualLab.tsx     comparison on Home
+app/page.tsx                         header, start/workspace switch, chat bar, research drawer
+components/ImportFlow.tsx            start screen (sample, upload) and stored-data controls
+components/MemoryList.tsx            the one memory list, Explicit / Inferred / Uncertain badges
+components/MemoryDetail.tsx          evidence, interpretation, history, confirm/correct/forget, connections
+components/ChatPanel.tsx             chat drawer, memories used per reply
+components/MemoryExplorer.tsx        full lineage map (research drawer)
+components/CounterfactualLab.tsx     three-arm comparison (research drawer)
 components/EvaluationDashboard.tsx   benchmark cases, rates, JSON download
 lib/memory-store.ts                  Zustand store, one session per demo person
 lib/lineage.ts                       provenance edges and counterfactual lists
