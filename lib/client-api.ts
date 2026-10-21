@@ -1,4 +1,23 @@
+import type { PromptMemory } from "./schemas";
+import { simulateExtract, simulateReply } from "./simulate";
+
+// The GitHub Pages build has no server, so model calls are disabled and the fixtures answer instead.
+export const STATIC_DEMO = process.env.NEXT_PUBLIC_STATIC_DEMO === "1";
+
+function offline(url: string, body?: unknown): unknown {
+  if (url === "/api/chat") {
+    const { memories } = body as { memories: PromptMemory[] };
+    return { reply: simulateReply(memories), simulated: true, model: "fixture", temperature: null };
+  }
+  if (url === "/api/extract" && body) {
+    const { messages } = body as { messages: Parameters<typeof simulateExtract>[0] };
+    return { ...simulateExtract(messages), relations: [], simulated: true, model: "fixture" };
+  }
+  return { provider: "fixture", model: "fixture" };
+}
+
 export async function postJson<T>(url: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  if (STATIC_DEMO) return offline(url, body) as T;
   let res: Response;
   try {
     res = await fetch(url, {
@@ -15,6 +34,7 @@ export async function postJson<T>(url: string, body: unknown, signal?: AbortSign
 }
 
 export async function getJson<T>(url: string): Promise<T> {
+  if (STATIC_DEMO) return offline(url) as T;
   let res: Response;
   try {
     res = await fetch(url);

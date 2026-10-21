@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { ArrowRight, FileText, MessageSquare, Quote, Sparkles, Upload } from "lucide-react";
+import StaticNotice from "@/components/StaticNotice";
 import { getJson, postJson } from "@/lib/client-api";
 import { useMemoryStore } from "@/lib/memory-store";
 import { dateSpan, parseTranscript, selectedMessages, IMPORT_MESSAGE_CAP, type ParsedConversation } from "@/lib/parse-transcript";
@@ -104,6 +105,7 @@ export default function ImportFlow() {
         <p className="mx-auto mt-4 max-w-xl text-lg leading-7" style={{ color: "var(--ink-dim)" }}>
           Upload a conversation to discover what an AI remembers, where those memories came from, and how to correct them.
         </p>
+        <div className="mx-auto mt-5 max-w-xl"><StaticNotice /></div>
       </div>
 
       {!parsed.length && (

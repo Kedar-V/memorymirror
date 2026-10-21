@@ -2,6 +2,10 @@
 
 MemoryMirror makes an assistant's stored beliefs about a person visible, traceable, and correctable. The demo uses three synthetic people. A wrong or stale memory is already in the record. You can see which message it came from, change it, and ask the same question again.
 
+**Live site: [kedar-v.github.io/memorymirror](https://kedar-v.github.io/memorymirror/)**
+
+> **API calls to language models are disabled on the website.** GitHub Pages has no server, so the hosted copy runs entirely in your browser on built-in sample data: chat replies and extracted memories come from labeled fixtures, and no model is called. To use a live model, clone this repo and add your own API key (see [Setup](#setup)).
+
 ## Research question
 
 When an assistant answers from a stored memory, can a person see that memory, trace it to a source message, correct it, and get a different answer to the same question under the same model and the same agent settings?
@@ -11,9 +15,11 @@ The lab holds the model and agent settings fixed and changes only the memory sna
 ## Setup
 
 ```bash
+git clone https://github.com/Kedar-V/memorymirror.git
+cd memorymirror
 npm install
-cp .env.example .env.local
-npm run dev
+cp .env.example .env.local   # then put your own CURSOR_API_KEY in .env.local
+npm run dev                  # http://localhost:3000
 ```
 
 Leave `CURSOR_API_KEY` empty to use the fixture mode. Every fixture reply is labeled **Simulated** in the interface and ends with “Simulated fixture: no model was called.”
@@ -31,6 +37,8 @@ The key is read only in server route handlers. It is not prefixed with `NEXT_PUB
 npm run build
 npm start
 ```
+
+The GitHub Pages copy is built by `.github/workflows/pages.yml` with `NEXT_PUBLIC_STATIC_DEMO=1`, which exports a static site, removes the API routes, and answers every model request in the browser from the fixtures.
 
 The app is a standard Next.js App Router project. Fixture mode can be deployed as-is. Live mode needs a long-running Node server with the Cursor SDK’s local executor; a short serverless limit will cut the agent off. Put `CURSOR_API_KEY` and, if you want, `CURSOR_MODEL` in the server environment. Do not expose the key as a public variable.
 

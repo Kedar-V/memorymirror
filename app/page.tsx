@@ -9,6 +9,8 @@ import EvaluationDashboard from "@/components/EvaluationDashboard";
 import ImportFlow, { StoredData } from "@/components/ImportFlow";
 import MemoryDetail from "@/components/MemoryDetail";
 import MemoryList from "@/components/MemoryList";
+import StaticNotice from "@/components/StaticNotice";
+import { STATIC_DEMO } from "@/lib/client-api";
 import { getPersona, personas } from "@/lib/demo-personas";
 import { useMemoryStore } from "@/lib/memory-store";
 
@@ -155,9 +157,10 @@ export default function Page() {
         <main className="fade mx-auto flex min-h-0 w-full max-w-[1320px] flex-1 flex-col px-6 pt-5">
           {persona.id === "demo" && (
             <p className="mb-3 text-xs" style={{ color: "var(--ink-dim)" }}>
-              Sample conversation with {persona.name}. These memories are pre-written sample data. Chat replies are generated live from them, and any simulated reply is labeled.
+              Sample conversation with {persona.name}. These memories are pre-written sample data. {STATIC_DEMO ? "Chat replies are simulated from them." : "Chat replies are generated live from them, and any simulated reply is labeled."}
             </p>
           )}
+          {STATIC_DEMO && <div className="mb-3"><StaticNotice /></div>}
           <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[45fr_55fr]">
             <MemoryList />
             <MemoryDetail />
